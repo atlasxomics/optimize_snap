@@ -38,7 +38,6 @@ metadata = LatchMetadata(
             description="The size of the tiles used for binning counts in the \
                 tile matrix.",
             batch_table_column=True,
-            hidden=True
         ),
         "n_features": LatchParameter(
             display_name="number of features",
@@ -107,7 +106,6 @@ def snap_workflow(
     n_features: List[int] = [25000],
     resolution: List[float] = [1.0],
     varfeat_iters: List[int] = [1],
-    leiden_iters: int = -1,
     min_cluster_size: int = 20,
     min_tss: float = 2.0,
     min_frags: int = 10,
@@ -126,7 +124,6 @@ def snap_workflow(
         tile_size=tile_size,
         n_features=n_features,
         resolution=resolution,
-        leiden_iters=leiden_iters,
         varfeat_iters=varfeat_iters,
         min_cluster_size=min_cluster_size,
         min_tss=min_tss,

@@ -31,7 +31,6 @@ def snap_task(
     n_features: List[int] = 25000,
     resolution: List[float] = 1.0,
     varfeat_iters: List[int] = 1,
-    leiden_iters: int = -1,
     min_cluster_size: int = 20,
     min_tss: float = 2.0,
     min_frags: int = 10,
@@ -106,7 +105,7 @@ def snap_task(
         logging.info(
             f"Performing dimensionality reduction with resolution {cr}..."
         )
-        adata = pp.add_clusters(adata, cr, leiden_iters, min_cluster_size)
+        adata = pp.add_clusters(adata, cr, min_cluster_size)
 
         adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
 

@@ -21,7 +21,6 @@ logging.basicConfig(
 def add_clusters(
     adata: anndata.AnnData,
     resolution: float,
-    leiden_iters: int,
     min_cluster_size: int
 ) -> anndata.AnnData:
     """Perform dimensionality reduction, batch correction, umap, clustering.
@@ -50,8 +49,8 @@ def add_clusters(
     snap.tl.leiden(
         adata,
         resolution=resolution,
-        n_iterations=leiden_iters,
         min_cluster_size=min_cluster_size,
+        n_iterations=-1,
         key_added="cluster"
     )
 
