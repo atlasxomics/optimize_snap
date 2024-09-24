@@ -4,6 +4,7 @@ import math
 import numpy as np
 import pandas as pd
 import snapatac2 as snap
+import squidpy as sq
 
 from scipy.sparse import vstack
 from typing import List
@@ -81,6 +82,16 @@ def add_metadata(run: Run, adata: anndata.AnnData) -> anndata.AnnData:
         run_id + "#" + bc for
         run_id, bc in zip(adata.obs["sample"], adata.obs["barcode"])
     ]
+
+    return adata
+
+
+def add_spatial(
+    adata: anndata.AnnData, x_key: str = "xcor", y_key: str = "ycor"
+) -> anndata.AnnData:
+    """Add move x and y coordinates from .obs to .obsm["spatial"] for squidpy.
+    """
+    adata.obsm["spatial"] = adata.obs[[y_key, x_key]].values
 
     return adata
 

@@ -1,22 +1,18 @@
-import anndata
+import glob
+import itertools
 import logging
-import numpy as np
 import os
-import pychromvar as pc
-import scanpy as sc
 import snapatac2 as snap
 import subprocess
 
-from typing import List, Tuple
+from typing import List
 
 from latch import message
-from latch.resources.tasks import custom_task
-from latch.types import LatchDir, LatchFile
+from latch.resources.tasks import large_task
+from latch.types import LatchDir
 
-import wf.features as ft
 import wf.plotting as pl
 import wf.preprocessing as pp
-import wf.spatial as sp
 import wf.utils as utils
 
 
@@ -26,19 +22,19 @@ logging.basicConfig(
 )
 
 
-@custom_task(cpu=62, memory=384, storage_gib=4949)
+@large_task
 def snap_task(
     runs: List[utils.Run],
     genome: utils.Genome,
-    resolution: float,
-    leiden_iters: int,
-    min_cluster_size: int,
-    min_tss: float,
-    min_frags: int,
-    tile_size: int,
-    n_features: int,
-    clustering_iters: int,
-    project_name: str
+    project_name: str,
+    tile_size: List[int] = 5000,
+    n_features: List[int] = 25000,
+    resolution: List[float] = 1.0,
+    varfeat_iters: List[int] = 1,
+    leiden_iters: int = -1,
+    min_cluster_size: int = 20,
+    min_tss: float = 2.0,
+    min_frags: int = 10,
 ) -> LatchDir:
 
     samples = [run.run_id for run in runs]
@@ -62,49 +58,84 @@ def snap_task(
     out_dir = f"/root/{project_name}"
     os.makedirs(out_dir, exist_ok=True)
 
-    figures_dir = f"{out_dir}/figures"
-    os.makedirs(figures_dir, exist_ok=True)
-
     if min_frags == 0:
-        logging.warning("Minimum fragments set to 0.")
+        logging.warrning("Minimum fragments set to 0.")
         message(
             typ="warning",
             data={"title": "min_frags", "body": "Minimum fragments set to 0."}
         )
 
-    # Preprocessing -----------------------------------------------------------
+    # Build sets of parameters --
+    sets = list(
+        itertools.product(tile_size, n_features, resolution, varfeat_iters)
+    )
+    logging.info(f"Iterating through paramter sets {sets}...")
+
+    # Create AnnData objects --------------------------------------------------
     logging.info("Creating AnnData objects...")
     adatas = pp.make_anndatas(runs, genome, min_frags=min_frags)
     adatas = pp.filter_adatas(adatas, min_tss=min_tss)
 
-    logging.info("Adding tile matrix to objects...")
-    snap.pp.add_tile_matrix(adatas, bin_size=tile_size)
+    # Iterate through parameter sets ------------------------------------------
+    count = 1
+    for set in sets:
+        ts, vf, cr, vi = set
+        logging.info(
+            f"Set {count}: tile size {ts}, variable features {vf}, clustering \
+            resolution {cr}, variable feature iterations {vi}"
+        )
+        cr_str = str(cr).replace(".", "-")
+        set_dir = f"{out_dir}/set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+        os.makedirs(set_dir, exist_ok=True)
 
-    if len(samples) > 1:
-        logging.info("Combining objects...")
-        adata = pp.combine_anndata(adatas, samples, filename="combined")
-    else:
-        adata = adatas[0]
+        logging.info(f"Adding tile matrix to objects with tile size {ts}...")
+        snap.pp.add_tile_matrix(adatas, bin_size=ts)
 
-    logging.info(
-        f"Selecting features with {n_features} features and \
-        {clustering_iters} clustering iteration(s)"
-    )
-    snap.pp.select_features(adata, n_features=n_features)
+        if len(samples) > 1:
+            logging.info("Combining objects...")
+            adata = pp.combine_anndata(adatas, samples, filename="combined")
+        else:
+            adata = adatas[0]
 
-    logging.info("Performing dimensionality reduction...")
-    adata = pp.add_clusters(adata, resolution, leiden_iters, min_cluster_size)
-    adata = sp.add_spatial(adata)  # Add spatial coordinates to tixels
+        logging.info(
+            f"Selecting features with {vf} features and {vi} clustering \
+            iteration(s)"
+        )
+        snap.pp.select_features(adata, n_features=vf, max_iter=vi)
 
-    # Plotting --
-    pl.plot_umaps(adata, groups, f"{figures_dir}/umap.pdf")
-    pl.plot_spatial(
-        adata,
-        samples,
-        "cluster",
-        f"{figures_dir}/spatial_dim.pdf",
-        pt_size=utils.pt_sizes[channels]["dim"]
-    )
+        logging.info(
+            f"Performing dimensionality reduction with resolution {cr}..."
+        )
+        adata = pp.add_clusters(adata, cr, leiden_iters, min_cluster_size)
+
+        adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
+
+        adata.write(f"{set_dir}/combined.h5ad")
+
+        # bedgraphs --
+        for group in groups:
+            snap.ex.export_coverage(
+                adata, groupby=group, suffix=f"{group}.bedgraph.zst"
+            )
+
+        # Plotting --
+        pl.plot_umaps(adata, groups, "umap.pdf")
+        pl.plot_spatial(
+            adata,
+            samples,
+            "cluster",
+            "spatial_dim.pdf",
+            pt_size=utils.pt_sizes[channels]["dim"]
+        )
+
+        pdfs = glob.glob("*.pdf")
+        bgs = glob.glob("*.zst")
+        subprocess.run(["mv"] + pdfs + bgs + set_dir)
+
+        count += 1
+
+    figures_dir = f"{out_dir}/figures"
+
     pl.plot_spatial_qc(
         adata,
         samples,
@@ -112,155 +143,11 @@ def snap_task(
         f"{figures_dir}/spatial_qc.pdf",
         pt_size=utils.pt_sizes[channels]["qc"]
     )
-
-    # Genes ------------------------------------------------------------------
-    logging.info("Making gene matrix...")
-    adata_gene = ft.make_geneadata(adata, genome)
-    adata_gene.obs.to_csv("gene_metadata.csv")
-
-    for group in groups:
-
-        logging.info(f"Finding marker genes for {group}s...")
-        sc.tl.rank_genes_groups(
-            adata_gene,
-            groupby=group,
-            method="t-test",
-            key_added=f"{group}_genes"
-        )
-
-        # Write marker genes to csv
-        sc.get.rank_genes_groups_df(
-            adata_gene,
-            group=None,
-            key=f"{group}_genes",
-            pval_cutoff=0.05,
-            log2fc_min=0.1
-        ).to_csv(f"{out_dir}/marker_genes_per_{group}.csv", index=False)
-
-    # Plot heatmap for genes
-    sc.pl.rank_genes_groups_matrixplot(
-        adata_gene,
-        n_genes=5,
-        groupby="cluster",
-        values_to_plot="scores",
-        key="cluster_genes",
-        min_logfoldchange=0.1,
-        save="genes"
+    snap.pl.frag_size_distr(
+        adata, interactive=False, out_file=f"{figures_dir}/fragment_size.pdf"
     )
-
-    adata_gene.write(f"{out_dir}/combined_ge.h5ad")
-
-    # Peaks ------------------------------------------------------------------
-    peak_mats = {}
-    for group in groups:
-
-        logging.info(f"Calling peaks for {group}s...")
-        snap.tl.macs3(
-            adata,
-            groupby=group,
-            shift=-75,
-            extsize=150,
-            qvalue=0.1,
-            key_added=f"{group}_peaks"
-        )
-
-        logging.info("Making peak matrix AnnData...")
-        anndata_peak = ft.make_peakmatrix(
-            adata, genome, f"{group}_peaks", log_norm=True
-        )
-
-        peak_mats[group] = anndata_peak
-
-        logging.info("Finded marker peaks ...")
-        sc.tl.rank_genes_groups(
-            peak_mats[group], groupby=group, method="wilcoxon"
-        )
-
-        anndata_peak.write(f"{out_dir}/{group}_peaks.h5ad")  # Save AnnData
-
-        sc.get.rank_genes_groups_df(  # Save as csv
-            peak_mats[group], group=None, pval_cutoff=0.05, log2fc_min=0.1
-        ).to_csv(f"{out_dir}/marker_peaks_per_{group}.csv", index=False)
-
-    adata.write(f"{out_dir}/combined.h5ad")
-
-    # Move scanpy plots
-    subprocess.run([f"mv /root/figures/* {figures_dir}"], shell=True)
+    snap.pl.tsse(
+        adata, interactive=False, out_file=f"{figures_dir}/tss_frags.pdf"
+    )
 
     return LatchDir(out_dir, f"latch:///snap_outs/{project_name}")
-
-
-@custom_task(cpu=62, memory=975, storage_gib=4949)
-def motif_task(
-    input_dir: LatchDir, genome: utils.Genome, project_name: str
-) -> Tuple[LatchFile, LatchFile]:
-    """Get Anndata object with motifs matrix from cluster peak matrix.  We
-    seperated into a seperate task because of the high memory requirements.
-    """
-
-    logging.info("Downloading data from previous step...")
-    anndata_path = f"{input_dir.local_path}/cluster_peaks.h5ad"
-    cluster_peaks = anndata.read_h5ad(anndata_path)
-
-    logging.info("Downloading reference genome for motifs...")
-    genome = genome.value  # Convert to str
-    fasta = utils.get_genome_fasta(genome)
-
-    logging.info("Preparing peak matrix for motifs...")
-    cluster_peaks = ft.get_motifs(cluster_peaks, fasta.local_path)
-    cluster_peaks.write("cluster_peaks.h5ad")
-
-    # Have to convert X to float64 for pc.compute_deviations
-    cluster_peaks.X = cluster_peaks.X.astype(np.float64)
-
-    logging.info("Computing motif deviation matrix...")
-    adata_motif = pc.compute_deviations(cluster_peaks, n_jobs=90)
-    adata_motif.write("combined_motifs.h5ad")
-
-    return (
-        LatchFile(
-            "cluster_peaks.h5ad",
-            f"latch:///snap_outs/{project_name}/cluster_peaks.h5ad"
-        ),
-        LatchFile(
-            "combined_motifs.h5ad",
-            f"latch:///snap_outs/{project_name}/combined_motifs.h5ad"
-        )
-    )
-
-
-if __name__ == "__main__":
-
-    logging.info("Plotting SnapATAC peak heatmap...")
-    # Perform SnapATAC marker peaks and heatmap
-
-    anndata_peak = anndata.read_h5ad("cluster_peaks.h5ad")
-    group = "cluster"
-    genome = "hg38"
-
-    marker_peaks = snap.tl.marker_regions(
-        anndata_peak, groupby=group, pvalue=0.05
-    )
-    snap.pl.regions(
-        anndata_peak,
-        groupby=group,
-        peaks=marker_peaks,
-        interactive=False,
-        out_file="snap_peak_heatmap.pdf"
-    )
-
-    logging.info("Plotting SnapATAC motif heatmap...")
-    motifs = snap.tl.motif_enrichment(
-        motifs=snap.datasets.cis_bp(unique=True),
-        regions=anndata_peak,
-        genome_fasta=(
-            snap.genome.mm10 if genome == "mm10" else snap.genome.hg38
-        )
-    )
-    snap.pl.motif_enrichment(
-        motifs,
-        max_fdr=0.0001,
-        height=1600,
-        interactive=False,
-        out_file="motaf_enrichment.pdf"
-    )

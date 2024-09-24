@@ -27,8 +27,6 @@ RUN pip install latch==2.52.2
 RUN mkdir /opt/latch
 
 # Install pip dependencies from `requirements.txt`
-RUN pip install numpy==1.25.2
-
 COPY requirements.txt /opt/latch/requirements.txt
 RUN pip install --requirement /opt/latch/requirements.txt
 
