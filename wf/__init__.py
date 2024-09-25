@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from latch.resources.workflow import workflow
 from latch.types import LatchDir
@@ -27,6 +27,17 @@ metadata = LatchMetadata(
                 position file for filtering on/off tissue. Note that multiple \
                 Conditions must be separted by '_' (i.e., Female-control).",
             batch_table_column=True
+        ),
+        "project_name": LatchParameter(
+            display_name="project name",
+            description="Name of output directory in snap_opt_outs/",
+            batch_table_column=True,
+            rules=[
+                LatchRule(
+                    regex="^[^/].*",
+                    message="project name cannot start with a '/'"
+                )
+            ]
         ),
         "genome": LatchParameter(
             display_name="genome",
@@ -82,16 +93,18 @@ metadata = LatchMetadata(
             batch_table_column=True,
             hidden=True
         ),
-        "project_name": LatchParameter(
-            display_name="project name",
-            description="Name of output directory in snap_opt_outs/",
+        "pt_size": LatchParameter(
+            display_name="Override point size",
+            description="Point size for spatial plot of clustering. \
+                Recommendations: 50x:75, 96x:5, 220:5.",
             batch_table_column=True,
-            rules=[
-                LatchRule(
-                    regex="^[^/].*",
-                    message="project name cannot start with a '/'"
-                )
-            ]
+            
+        ),
+        "qc_pt_size": LatchParameter(
+            display_name="Override spatial QC point size",
+            description="Point size for spatial plot of clustering. \
+                Recommendations: 50x:25, 96x:1, 220:0.5.",
+            batch_table_column=True
         ),
     }
 )
@@ -109,6 +122,8 @@ def opt_workflow(
     min_cluster_size: int = 20,
     min_tss: float = 2.0,
     min_frags: int = 10,
+    pt_size: Optional[int] = None,
+    qc_pt_size: Optional[int] = None,
 ) -> LatchDir:
     """Determine optimal input parameters for spatial epigenetic analysis.
     * Variable Feature Iterations
@@ -128,6 +143,8 @@ def opt_workflow(
         min_cluster_size=min_cluster_size,
         min_tss=min_tss,
         min_frags=min_frags,
+        pt_size=pt_size,
+        qc_pt_size=qc_pt_size
     )
 
     return results

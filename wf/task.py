@@ -5,7 +5,7 @@ import os
 import snapatac2 as snap
 import subprocess
 
-from typing import List
+from typing import List, Optional
 
 from latch import message
 from latch.resources.tasks import large_task
@@ -34,6 +34,8 @@ def opt_task(
     min_cluster_size: int = 20,
     min_tss: float = 2.0,
     min_frags: int = 10,
+    pt_size: Optional[int] = None,
+    qc_pt_size: Optional[int] = None
 ) -> LatchDir:
 
     samples = [run.run_id for run in runs]
@@ -78,69 +80,94 @@ def opt_task(
     # Iterate through parameter sets ------------------------------------------
     count = 1
     for set in sets:
-        ts, vf, cr, vi = set
-        logging.info(
-            f"Set {count}: tile size {ts}, variable features {vf}, clustering\
-            resolution {cr}, variable feature iterations {vi}"
-        )
-        cr_str = str(cr).replace(".", "-")
-        set_dir = f"{out_dir}/set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
-        os.makedirs(set_dir, exist_ok=True)
+        try:
+            ts, vf, cr, vi = set
+            logging.info(
+                f"""Set {count}: tile size {ts}, variable features {vf},
+                clustering resolution {cr}, variable feature iterations {vi}"""
+            )
+            cr_str = str(cr).replace(".", "-")
+            set_dir = f"{out_dir}/set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+            os.makedirs(set_dir, exist_ok=True)
 
-        logging.info(f"Adding tile matrix to objects with tile size {ts}...")
-        snap.pp.add_tile_matrix(adatas, bin_size=ts)
+            logging.info(f"Adding tile matrix with tile size {ts}...")
+            snap.pp.add_tile_matrix(adatas, bin_size=ts)
 
-        if len(samples) > 1:
-            logging.info("Combining objects...")
-            adata = pp.combine_anndata(adatas, samples, filename="combined")
-        else:
-            adata = adatas[0]
+            if len(samples) > 1:
+                logging.info("Combining objects...")
+                adata = pp.combine_anndata(
+                    adatas, samples, filename="combined"
+                )
+            else:
+                adata = adatas[0]
 
-        logging.info(
-            f"Selecting features with {vf} features and {vi} clustering \
-            iteration(s)"
-        )
-        snap.pp.select_features(adata, n_features=vf, max_iter=vi)
+            logging.info(
+                f"Selecting features with {vf} features and {vi} clustering \
+                iteration(s)"
+            )
+            snap.pp.select_features(adata, n_features=vf, max_iter=vi)
 
-        logging.info(
-            f"Performing dimensionality reduction with resolution {cr}..."
-        )
-        adata = pp.add_clusters(adata, cr, min_cluster_size)
+            logging.info(
+                f"Performing dimensionality reduction with resolution {cr}..."
+            )
+            adata = pp.add_clusters(adata, cr, min_cluster_size)
 
-        adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
+            adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
 
-        adata.write(f"{set_dir}/combined.h5ad")
+            adata.write(f"{set_dir}/combined.h5ad")
 
-        # bedgraphs --
-        for group in groups:
-            snap.ex.export_coverage(
-                adata, groupby=group, suffix=f"{group}.bedgraph.zst"
+            # bedgraphs --
+            for group in groups:
+                snap.ex.export_coverage(
+                    adata, groupby=group, suffix=f"{group}.bedgraph.zst"
+                )
+
+            # Plotting --
+            pl.plot_umaps(adata, groups, "umap.pdf")
+
+            pt_size = (
+                pt_size if pt_size is not None
+                else utils.pt_sizes[channels]["dim"]
+            )
+            pl.plot_spatial(
+                adata,
+                samples,
+                "cluster",
+                "spatial_dim.pdf",
+                pt_size=pt_size
             )
 
-        # Plotting --
-        pl.plot_umaps(adata, groups, "umap.pdf")
-        pl.plot_spatial(
-            adata,
-            samples,
-            "cluster",
-            "spatial_dim.pdf",
-            pt_size=utils.pt_sizes[channels]["dim"]
-        )
+            pdfs = glob.glob("*.pdf")
+            bgs = glob.glob("*.zst")
+            subprocess.run(["mv"] + pdfs + bgs + [set_dir])
 
-        pdfs = glob.glob("*.pdf")
-        bgs = glob.glob("*.zst")
-        subprocess.run(["mv"] + pdfs + bgs + [set_dir])
+        except Exception as e:
+            logging.warning(f"Exception for set {count}: {e}")
+            message(
+                typ="warning",
+                data={
+                    "title": "failed set",
+                    "body": f"""set {count} with tile size {ts}, variable
+                        features {vf}, clustering resolution {cr}, variable
+                        feature iterations {vi} failed with Exception '{e}'"""
+                }
+            )
 
         count += 1
 
     figures_dir = f"{out_dir}/figures"
+    os.makedirs(figures_dir, exist_ok=True)
 
+    qc_pt_size = (
+        qc_pt_size if qc_pt_size is not None
+        else utils.pt_sizes[channels]["qc"]
+    )
     pl.plot_spatial_qc(
         adata,
         samples,
         qc_metrics,
         f"{figures_dir}/spatial_qc.pdf",
-        pt_size=utils.pt_sizes[channels]["qc"]
+        pt_size=qc_pt_size
     )
     snap.pl.frag_size_distr(
         adata, interactive=False, out_file=f"{figures_dir}/fragment_size.pdf"
@@ -149,4 +176,4 @@ def opt_task(
         adata, interactive=False, out_file=f"{figures_dir}/tss_frags.pdf"
     )
 
-    return LatchDir(out_dir, f"latch:///snap_outs/{project_name}")
+    return LatchDir(out_dir, f"latch:///snap_opts/{project_name}")

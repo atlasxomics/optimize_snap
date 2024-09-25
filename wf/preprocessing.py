@@ -4,7 +4,6 @@ import math
 import numpy as np
 import pandas as pd
 import snapatac2 as snap
-import squidpy as sq
 
 from scipy.sparse import vstack
 from typing import List
