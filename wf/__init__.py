@@ -6,7 +6,7 @@ from latch.types.metadata import (
     LatchAuthor, LatchMetadata, LatchParameter, LatchRule
 )
 
-from wf.task import snap_task
+from wf.task import opt_task
 from wf.utils import Run, Genome
 
 
@@ -98,7 +98,7 @@ metadata = LatchMetadata(
 
 
 @workflow(metadata)
-def snap_workflow(
+def opt_workflow(
     runs: List[Run],
     genome: Genome,
     project_name: str,
@@ -117,7 +117,7 @@ def snap_workflow(
         * https://github.com/kaizhang/SnapATAC2/issues/111
     """
 
-    results = snap_task(
+    results = opt_task(
         runs=runs,
         genome=genome,
         project_name=project_name,

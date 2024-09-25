@@ -23,14 +23,14 @@ logging.basicConfig(
 
 
 @large_task
-def snap_task(
+def opt_task(
     runs: List[utils.Run],
     genome: utils.Genome,
     project_name: str,
-    tile_size: List[int] = 5000,
-    n_features: List[int] = 25000,
-    resolution: List[float] = 1.0,
-    varfeat_iters: List[int] = 1,
+    tile_size: List[int] = [5000],
+    n_features: List[int] = [25000],
+    resolution: List[float] = [1.0],
+    varfeat_iters: List[int] = [1],
     min_cluster_size: int = 20,
     min_tss: float = 2.0,
     min_frags: int = 10,
@@ -80,7 +80,7 @@ def snap_task(
     for set in sets:
         ts, vf, cr, vi = set
         logging.info(
-            f"Set {count}: tile size {ts}, variable features {vf}, clustering \
+            f"Set {count}: tile size {ts}, variable features {vf}, clustering\
             resolution {cr}, variable feature iterations {vi}"
         )
         cr_str = str(cr).replace(".", "-")
@@ -129,7 +129,7 @@ def snap_task(
 
         pdfs = glob.glob("*.pdf")
         bgs = glob.glob("*.zst")
-        subprocess.run(["mv"] + pdfs + bgs + set_dir)
+        subprocess.run(["mv"] + pdfs + bgs + [set_dir])
 
         count += 1
 
