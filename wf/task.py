@@ -2,6 +2,7 @@ import glob
 import itertools
 import logging
 import os
+import scanpy as sc
 import snapatac2 as snap
 import subprocess
 
@@ -70,6 +71,7 @@ def opt_task(
     sets = list(
         itertools.product(tile_size, n_features, resolution, varfeat_iters)
     )
+
     logging.info(f"Iterating through paramter sets {sets}...")
 
     # Create AnnData objects --------------------------------------------------
@@ -78,6 +80,7 @@ def opt_task(
     adatas = pp.filter_adatas(adatas, min_tss=min_tss)
 
     # Iterate through parameter sets ------------------------------------------
+    adata_dict = {}
     count = 1
     for set in sets:
         try:
@@ -87,7 +90,8 @@ def opt_task(
                 clustering resolution {cr}, variable feature iterations {vi}"""
             )
             cr_str = str(cr).replace(".", "-")
-            set_dir = f"{out_dir}/set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+            set_str = f"set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+            set_dir = f"{out_dir}/{set_str}"
             os.makedirs(set_dir, exist_ok=True)
 
             logging.info(f"Adding tile matrix with tile size {ts}...")
@@ -114,6 +118,7 @@ def opt_task(
 
             adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
 
+            adata_dict[set_str] = adata
             adata.write(f"{set_dir}/combined.h5ad")
 
             # bedgraphs --
@@ -121,25 +126,8 @@ def opt_task(
                 snap.ex.export_coverage(
                     adata, groupby=group, suffix=f"{group}.bedgraph.zst"
                 )
-
-            # Plotting --
-            pl.plot_umaps(adata, groups, "umap.pdf")
-
-            pt_size = (
-                pt_size if pt_size is not None
-                else utils.pt_sizes[channels]["dim"]
-            )
-            pl.plot_spatial(
-                adata,
-                samples,
-                "cluster",
-                "spatial_dim.pdf",
-                pt_size=pt_size
-            )
-
-            pdfs = glob.glob("*.pdf")
             bgs = glob.glob("*.zst")
-            subprocess.run(["mv"] + pdfs + bgs + [set_dir])
+            subprocess.run(["mv"] + bgs + [set_dir])
 
         except Exception as e:
             logging.warning(f"Exception for set {count}: {e}")
@@ -157,6 +145,19 @@ def opt_task(
 
     figures_dir = f"{out_dir}/figures"
     os.makedirs(figures_dir, exist_ok=True)
+
+    pl.combine_umaps(adata_dict, f"{figures_dir}/all_umaps.pdf")
+
+    pt_size = (
+        pt_size if pt_size is not None
+        else utils.pt_sizes[channels]["dim"]
+    )
+    pl.combine_spatials(
+        adata_dict,
+        samples,
+        f"{figures_dir}/all_spatialdim.pdf",
+        pt_size=pt_size
+    )
 
     qc_pt_size = (
         qc_pt_size if qc_pt_size is not None

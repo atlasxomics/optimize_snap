@@ -7,73 +7,78 @@ from matplotlib.backends.backend_pdf import PdfPages
 from typing import List
 
 
-def plot_umaps(
-    adata: anndata.AnnData, groups: List[str], output_path: str
+def combine_umaps(
+    adata_dict: dict[str, anndata.AnnData], output_path: str
 ) -> None:
     """Create a figure with UMAPs colored categorical metadata.
     """
 
-    _, axs = plt.subplots(2, 2, figsize=(10, 10))
-    axs = axs.flatten()
-
-    for i in range(len(groups)):
-        group = groups[i]
-        sc.pl.umap(
-            adata,
-            s=10,
-            color=group,
-            ax=axs[i],
-            show=False,
-            title=f"UMAP: colored by {group}"
-        )
-
-    # Ensure empty plots are not displayed
-    for j in range(len(axs)):
-        axs[j].axis("off")
-
-    plt.tight_layout()
-
-    plt.savefig(output_path)
-
-
-def plot_spatial(
-    adata: anndata.AnnData,
-    samples: List[str],
-    color_by: str,
-    output_path: str,
-    pt_size: int = 75
-) -> None:
-    """Plot cells spatially, color by metadata stored in .obs. The function
-    creates a plot for each run and saves to a .pdf, with four runs per page.
-    """
-
+    sets = list(adata_dict.keys())
     with PdfPages(output_path) as pdf:
-        for i in range(0, len(samples), 4):
+        for i in range(0, len(sets), 4):
 
-            sample_batch = samples[i:i + 4]
-            fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+            batch = sets[i:i + 4]
+            fig, axs = plt.subplots(2, 2, figsize=(12, 12))
             axs = axs.flatten()
 
-            for i, sample in enumerate(sample_batch):
-
-                sq.pl.spatial_scatter(
-                    adata[adata.obs["sample"] == sample],
-                    color=color_by,
-                    size=pt_size,
-                    shape=None,
-                    library_id=sample,
+            for i, s in enumerate(batch):
+                sc.pl.umap(
+                    adata_dict[s],
+                    s=10,
+                    color="cluster",
                     ax=axs[i],
-                    title=f"{sample}: {color_by}"
+                    show=False,
+                    title=s
                 )
-                axs[i].axis("off")
 
             # Ensure empty plots are not displayed
-            for j in range(len(sample_batch), 4):
+            for j in range(len(axs)):
                 axs[j].axis("off")
 
-        plt.tight_layout()
+            plt.tight_layout()
 
-        pdf.savefig(fig)
+            pdf.savefig(fig)
+        plt.close(fig)
+
+
+def combine_spatials(
+    adata_dict: dict[str, anndata.AnnData],
+    samples: List[str],
+    output_path: str,
+    pt_size: int = 5
+) -> None:
+    """For each sample/condition, create a spatialdimplot colored by cluster.
+    """
+
+    sets = list(adata_dict.keys())
+    with PdfPages(output_path) as pdf:
+        for sample in samples:
+            for i in range(0, len(sets), 4):
+
+                batch = sets[i:i + 4]
+                fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+                axs = axs.flatten()
+
+                for i, s in enumerate(batch):
+                    adata = adata_dict[s]
+                    sq.pl.spatial_scatter(
+                        adata[adata.obs["sample"] == sample],
+                        color="cluster",
+                        size=pt_size,
+                        shape=None,
+                        library_id=sample,
+                        ax=axs[i],
+                        title=f"{sample}: {s}"
+                    )
+                    axs[i].axis("off")
+
+                # Ensure empty plots are not displayed
+                for j in range(len(axs)):
+                    axs[j].axis("off")
+
+                plt.tight_layout()
+
+                pdf.savefig(fig)
         plt.close(fig)
 
 
