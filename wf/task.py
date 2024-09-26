@@ -2,6 +2,7 @@ import glob
 import itertools
 import logging
 import os
+import scanpy as sc
 import snapatac2 as snap
 import subprocess
 
@@ -70,6 +71,10 @@ def opt_task(
     sets = list(
         itertools.product(tile_size, n_features, resolution, varfeat_iters)
     )
+
+    umaps = dict.fromkeys(sets)  # Init dict to store umap
+    dimplots = dict.fromkeys(samples)  # Init dict to store spatial dimplots
+
     logging.info(f"Iterating through paramter sets {sets}...")
 
     # Create AnnData objects --------------------------------------------------
@@ -122,8 +127,15 @@ def opt_task(
                     adata, groupby=group, suffix=f"{group}.bedgraph.zst"
                 )
 
-            # Plotting --
-            pl.plot_umaps(adata, groups, "umap.pdf")
+            # # Plotting --
+            # pl.plot_umaps(adata, groups, "umap.pdf")
+            umaps["set"] = sc.pl.umap(
+                adata,
+                s=10,
+                color="cluster",
+                show=False,                     
+                title=f"UMAP: {set}"
+            )
 
             pt_size = (
                 pt_size if pt_size is not None
