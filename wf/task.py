@@ -126,23 +126,8 @@ def opt_task(
                 snap.ex.export_coverage(
                     adata, groupby=group, suffix=f"{group}.bedgraph.zst"
                 )
-
-            # Plotting --
-            pt_size = (
-                pt_size if pt_size is not None
-                else utils.pt_sizes[channels]["dim"]
-            )
-            pl.plot_spatial(
-                adata,
-                samples,
-                "cluster",
-                "spatial_dim.pdf",
-                pt_size=pt_size
-            )
-
-            pdfs = glob.glob("*.pdf")
             bgs = glob.glob("*.zst")
-            subprocess.run(["mv"] + pdfs + bgs + [set_dir])
+            subprocess.run(["mv"] + bgs + [set_dir])
 
         except Exception as e:
             logging.warning(f"Exception for set {count}: {e}")
@@ -162,6 +147,17 @@ def opt_task(
     os.makedirs(figures_dir, exist_ok=True)
 
     pl.combine_umaps(adata_dict, f"{figures_dir}/all_umaps.pdf")
+
+    pt_size = (
+        pt_size if pt_size is not None
+        else utils.pt_sizes[channels]["dim"]
+    )
+    pl.combine_spatials(
+        adata_dict,
+        samples,
+        f"{figures_dir}/all_spatialdim.pdf",
+        pt_size=pt_size
+    )
 
     qc_pt_size = (
         qc_pt_size if qc_pt_size is not None
