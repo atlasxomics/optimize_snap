@@ -98,12 +98,14 @@ metadata = LatchMetadata(
             description="Point size for spatial plot of clustering. \
                 Recommendations: 50x:75, 96x:5, 220:5.",
             batch_table_column=True,
+            hidden=True
         ),
         "qc_pt_size": LatchParameter(
             display_name="Override spatial QC point size",
             description="Point size for spatial plot of clustering. \
                 Recommendations: 50x:25, 96x:1, 220:0.5.",
-            batch_table_column=True
+            batch_table_column=True,
+            hidden=True
         ),
     }
 )

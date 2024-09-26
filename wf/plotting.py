@@ -7,33 +7,38 @@ from matplotlib.backends.backend_pdf import PdfPages
 from typing import List
 
 
-def plot_umaps(
-    adata: anndata.AnnData, groups: List[str], output_path: str
+def combine_umaps(
+    adata_dict: dict[str, anndata.AnnData], output_path: str
 ) -> None:
     """Create a figure with UMAPs colored categorical metadata.
     """
 
-    _, axs = plt.subplots(2, 2, figsize=(10, 10))
-    axs = axs.flatten()
+    sets = list(adata_dict.keys())
+    with PdfPages(output_path) as pdf:
+        for i in range(0, len(sets), 4):
 
-    for i in range(len(groups)):
-        group = groups[i]
-        sc.pl.umap(
-            adata,
-            s=10,
-            color=group,
-            ax=axs[i],
-            show=False,
-            title=f"UMAP: colored by {group}"
-        )
+            batch = sets[i:i + 4]
+            fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+            axs = axs.flatten()
 
-    # Ensure empty plots are not displayed
-    for j in range(len(axs)):
-        axs[j].axis("off")
+            for i, s in enumerate(batch):
+                sc.pl.umap(
+                    adata_dict[s],
+                    s=10,
+                    color="cluster",
+                    ax=axs[i],
+                    show=False,
+                    title=s
+                )
 
-    plt.tight_layout()
+            # Ensure empty plots are not displayed
+            for j in range(len(axs)):
+                axs[j].axis("off")
 
-    plt.savefig(output_path)
+            plt.tight_layout()
+
+            pdf.savefig(fig)
+        plt.close(fig)
 
 
 def plot_spatial(

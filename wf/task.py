@@ -72,9 +72,6 @@ def opt_task(
         itertools.product(tile_size, n_features, resolution, varfeat_iters)
     )
 
-    umaps = dict.fromkeys(sets)  # Init dict to store umap
-    dimplots = dict.fromkeys(samples)  # Init dict to store spatial dimplots
-
     logging.info(f"Iterating through paramter sets {sets}...")
 
     # Create AnnData objects --------------------------------------------------
@@ -83,6 +80,7 @@ def opt_task(
     adatas = pp.filter_adatas(adatas, min_tss=min_tss)
 
     # Iterate through parameter sets ------------------------------------------
+    adata_dict = {}
     count = 1
     for set in sets:
         try:
@@ -92,7 +90,8 @@ def opt_task(
                 clustering resolution {cr}, variable feature iterations {vi}"""
             )
             cr_str = str(cr).replace(".", "-")
-            set_dir = f"{out_dir}/set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+            set_str = f"set{count}_ts{ts}-vf{vf}-cr{cr_str}-vi{vi}"
+            set_dir = f"{out_dir}/{set_str}"
             os.makedirs(set_dir, exist_ok=True)
 
             logging.info(f"Adding tile matrix with tile size {ts}...")
@@ -119,6 +118,7 @@ def opt_task(
 
             adata = pp.add_spatial(adata)  # Add spatial coordinates to tixels
 
+            adata_dict[set_str] = adata
             adata.write(f"{set_dir}/combined.h5ad")
 
             # bedgraphs --
@@ -127,16 +127,7 @@ def opt_task(
                     adata, groupby=group, suffix=f"{group}.bedgraph.zst"
                 )
 
-            # # Plotting --
-            # pl.plot_umaps(adata, groups, "umap.pdf")
-            umaps["set"] = sc.pl.umap(
-                adata,
-                s=10,
-                color="cluster",
-                show=False,                     
-                title=f"UMAP: {set}"
-            )
-
+            # Plotting --
             pt_size = (
                 pt_size if pt_size is not None
                 else utils.pt_sizes[channels]["dim"]
@@ -169,6 +160,8 @@ def opt_task(
 
     figures_dir = f"{out_dir}/figures"
     os.makedirs(figures_dir, exist_ok=True)
+
+    pl.combine_umaps(adata_dict, f"{figures_dir}/all_umaps.pdf")
 
     qc_pt_size = (
         qc_pt_size if qc_pt_size is not None
