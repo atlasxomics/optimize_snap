@@ -2,7 +2,6 @@ import glob
 import itertools
 import logging
 import os
-import scanpy as sc
 import snapatac2 as snap
 import subprocess
 
@@ -124,10 +123,13 @@ def opt_task(
             # bedgraphs --
             for group in groups:
                 snap.ex.export_coverage(
-                    adata, groupby=group, suffix=f"{group}.bedgraph.zst"
+                    adata, groupby=group, suffix=f"{group}.bedgraph.gz"
                 )
-            bgs = glob.glob("*.zst")
-            subprocess.run(["mv"] + bgs + [set_dir])
+
+                coverage_dir = f"{set_dir}/{group}_coverages"
+                os.makedirs(coverage_dir, exist_ok=True)
+                bgs = glob.glob("*.zst")
+                subprocess.run(["mv"] + bgs + [coverage_dir])
 
         except Exception as e:
             logging.warning(f"Exception for set {count}: {e}")
