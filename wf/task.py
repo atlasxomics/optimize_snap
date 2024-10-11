@@ -128,7 +128,7 @@ def opt_task(
 
                 coverage_dir = f"{set_dir}/{group}_coverages"
                 os.makedirs(coverage_dir, exist_ok=True)
-                bgs = glob.glob("*.zst")
+                bgs = glob.glob("*.bedgraph.gz")
                 subprocess.run(["mv"] + bgs + [coverage_dir])
 
         except Exception as e:
