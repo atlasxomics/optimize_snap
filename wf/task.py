@@ -1,3 +1,4 @@
+import copy
 import glob
 import itertools
 import logging
@@ -102,7 +103,7 @@ def opt_task(
                     adatas, samples, filename="combined"
                 )
             else:
-                adata = adatas[0]
+                adata = copy.deepcopy(adatas[0])
 
             logging.info(
                 f"Selecting features with {vf} features and {vi} clustering \

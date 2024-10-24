@@ -26,7 +26,9 @@ def add_clusters(
     """
 
     # Dimensionality reduction
-    snap.tl.spectral(adata)
+    snap.tl.spectral(  # First reduce to n_comps demensions
+        adata, n_comps=30, features="selected"
+    )
 
     try:
         n_runs = len(adata.obs["sample"].unique())

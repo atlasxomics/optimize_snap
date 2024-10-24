@@ -21,19 +21,19 @@ def combine_umaps(
             fig, axs = plt.subplots(2, 2, figsize=(12, 12))
             axs = axs.flatten()
 
-            for i, s in enumerate(batch):
+            for j, s in enumerate(batch):
                 sc.pl.umap(
                     adata_dict[s],
                     s=10,
                     color="cluster",
-                    ax=axs[i],
+                    ax=axs[j],
                     show=False,
                     title=s
                 )
 
             # Ensure empty plots are not displayed
-            for j in range(len(axs)):
-                axs[j].axis("off")
+            for k in range(len(axs)):
+                axs[k].axis("off")
 
             plt.tight_layout()
 
@@ -59,7 +59,7 @@ def combine_spatials(
                 fig, axs = plt.subplots(2, 2, figsize=(10, 10))
                 axs = axs.flatten()
 
-                for i, s in enumerate(batch):
+                for j, s in enumerate(batch):
                     adata = adata_dict[s]
                     sq.pl.spatial_scatter(
                         adata[adata.obs["sample"] == sample],
@@ -67,14 +67,14 @@ def combine_spatials(
                         size=pt_size,
                         shape=None,
                         library_id=sample,
-                        ax=axs[i],
+                        ax=axs[j],
                         title=f"{sample}: {s}"
                     )
-                    axs[i].axis("off")
+                    axs[j].axis("off")
 
                 # Ensure empty plots are not displayed
-                for j in range(len(axs)):
-                    axs[j].axis("off")
+                for k in range(len(axs)):
+                    axs[k].axis("off")
 
                 plt.tight_layout()
 
